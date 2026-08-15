@@ -1,0 +1,1356 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Space Shooter Ultra</title>
+
+<style>
+body{
+  margin:0;
+  background:black;
+  overflow:hidden;
+  text-align:center;
+  color:white;
+  font-family:Arial;
+  touch-action:manipulation;
+}
+
+canvas{
+  display:block;
+  margin:auto;
+  background:#000;
+}
+
+.controls{
+  position:fixed;
+  bottom:10px;
+  width:100%;
+  display:flex;
+  justify-content:center;
+  gap:10px;
+}
+
+
+  
+button{
+  width:95px;
+  height:50px;
+  font-size:18px;
+  border:none;
+  border-radius:10px;
+}
+
+#musicBtn{
+  position:fixed;
+  top:10px;
+  right:10px;
+  width:55px;
+  height:45px;
+  font-size:22px;
+  z-index:5;
+}
+
+#startScreen{
+  position:fixed;
+  inset:0;
+  background:black;
+  display:flex;
+  flex-direction:column;
+  justify-content:center;
+  align-items:center;
+  gap:20px;
+  z-index:10;
+}
+
+#startBtn{
+  width:180px;
+  height:60px;
+  font-size:24px;
+}
+</style>
+</head>
+
+<body>
+
+<div id="startScreen">
+  <h1>🚀 Space Shooter Ultra</h1>
+  <button id="startBtn">Start Game</button>
+</div>
+
+<h3>🚀 Space Shooter Ultra</h3>
+
+<!-- 🎵 Background Music -->
+<audio id="bgMusic" loop>
+  <source src="background.mp3" type="audio/mpeg">
+</audio>
+
+<button id="musicBtn">🔊</button>
+
+<canvas id="game" width="360" height="600"></canvas>
+
+<div class="controls">
+  <button id="leftBtn">⬅️</button>
+  <button id="pauseBtn">⏸️</button>
+  <button id="rightBtn">➡️</button>
+</div>
+
+<script>
+
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+
+const bgMusic = document.getElementById('bgMusic');
+const musicBtn = document.getElementById('musicBtn');
+
+let musicOn = true;
+
+/* =========================
+   MUSIC
+========================= */
+
+bgMusic.volume = 0.35;
+
+function playBackgroundMusic(){
+  if(musicOn){
+    bgMusic.play().catch(()=>{});
+  }
+}
+
+function pauseBackgroundMusic(){
+  bgMusic.pause();
+}
+
+/* 🔊 / 🔇 Music Button */
+
+musicBtn.onclick = ()=>{
+  musicOn = !musicOn;
+
+  if(musicOn){
+    musicBtn.innerText = '🔊';
+    playBackgroundMusic();
+  }else{
+    musicBtn.innerText = '🔇';
+    pauseBackgroundMusic();
+  }
+};
+
+
+/* =========================
+   SOUND EFFECTS
+========================= */
+
+let audioCtx = null;
+
+function initAudio(){
+  if(!audioCtx){
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  }
+}
+
+function playSound(type){
+
+  if(!audioCtx) return;
+
+  try{
+
+    let now = audioCtx.currentTime;
+
+    if(type === 'shoot'){
+
+      let osc = audioCtx.createOscillator();
+      let gain = audioCtx.createGain();
+
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+
+      osc.type = 'triangle';
+
+      osc.frequency.setValueAtTime(800, now);
+      osc.frequency.exponentialRampToValueAtTime(150, now + 0.08);
+
+      gain.gain.setValueAtTime(0.1, now);
+      gain.gain.linearRampToValueAtTime(0.01, now + 0.08);
+
+      osc.start(now);
+      osc.stop(now + 0.08);
+
+    }
+
+    else if(type === 'explosion'){
+
+      let bufferSize = audioCtx.sampleRate * 0.3;
+
+      let buffer = audioCtx.createBuffer(
+        1,
+        bufferSize,
+        audioCtx.sampleRate
+      );
+
+      let output = buffer.getChannelData(0);
+
+      for(let i=0;i<bufferSize;i++){
+        output[i] = Math.random() * 2 - 1;
+      }
+
+      let whiteNoise = audioCtx.createBufferSource();
+      whiteNoise.buffer = buffer;
+
+      let filter = audioCtx.createBiquadFilter();
+
+      filter.type = 'lowpass';
+
+      filter.frequency.setValueAtTime(800, now);
+      filter.frequency.linearRampToValueAtTime(50, now + 0.3);
+
+      let gain = audioCtx.createGain();
+
+      gain.gain.setValueAtTime(0.25, now);
+      gain.gain.linearRampToValueAtTime(0.01, now + 0.3);
+
+      whiteNoise.connect(filter);
+      filter.connect(gain);
+      gain.connect(audioCtx.destination);
+
+      whiteNoise.start(now);
+      whiteNoise.stop(now + 0.3);
+
+    }
+
+    else if(type === 'powerup'){
+
+      let osc = audioCtx.createOscillator();
+      let gain = audioCtx.createGain();
+
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+
+      osc.type = 'sine';
+
+      osc.frequency.setValueAtTime(250, now);
+      osc.frequency.exponentialRampToValueAtTime(900, now + 0.25);
+
+      gain.gain.setValueAtTime(0.15, now);
+      gain.gain.linearRampToValueAtTime(0.01, now + 0.25);
+
+      osc.start(now);
+      osc.stop(now + 0.25);
+
+    }
+
+    else if(type === 'coin'){
+
+      let osc = audioCtx.createOscillator();
+      let gain = audioCtx.createGain();
+
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+
+      osc.type = 'sine';
+
+      osc.frequency.setValueAtTime(987.77, now);
+      osc.frequency.setValueAtTime(1318.51, now + 0.08);
+
+      gain.gain.setValueAtTime(0.12, now);
+      gain.gain.linearRampToValueAtTime(0.01, now + 0.2);
+
+      osc.start(now);
+      osc.stop(now + 0.2);
+    }
+
+  }catch(e){}
+}
+
+
+/* =========================
+   GAME VARIABLES
+========================= */
+
+let running = false;
+let paused = false;
+
+let player = {
+  x:160,
+  y:520,
+  w:40,
+  h:50,
+  speed:18,
+  shield:false
+};
+
+let bullets = [];
+let bossBullets = [];
+let enemies = [];
+let explosions = [];
+let coins = [];
+let powerups = [];
+
+let score = 0;
+let coinCount = 0;
+
+let best = localStorage.getItem('bestUltra') || 0;
+
+let lives = 3;
+let gameOver = false;
+
+let laserMode = false;
+let boss = null;
+
+let gameSpeedMultiplier = 1;
+
+
+/* =========================
+   STARS
+========================= */
+
+let stars = [];
+
+for(let i=0;i<120;i++){
+
+  stars.push({
+    x:Math.random()*canvas.width,
+    y:Math.random()*canvas.height,
+    s:Math.random()*2+1
+  });
+
+}
+
+function drawStars(){
+
+  ctx.fillStyle='white';
+
+  stars.forEach(star=>{
+
+    ctx.fillRect(
+      star.x,
+      star.y,
+      star.s,
+      star.s
+    );
+
+    star.y += 2 * gameSpeedMultiplier;
+
+    if(star.y > canvas.height){
+
+      star.y = 0;
+      star.x = Math.random()*canvas.width;
+
+    }
+
+  });
+
+}
+
+
+/* =========================
+   PLAYER
+========================= */
+
+function drawPlayer(){
+
+  ctx.font = '36px Arial';
+
+  ctx.fillText(
+    '🚀',
+    player.x,
+    player.y + 38
+  );
+
+  if(player.shield){
+
+    ctx.beginPath();
+
+    ctx.arc(
+      player.x+20,
+      player.y+25,
+      30,
+      0,
+      Math.PI*2
+    );
+
+    ctx.strokeStyle='cyan';
+    ctx.lineWidth=3;
+
+    ctx.stroke();
+  }
+
+}
+
+
+/* =========================
+   SHOOT
+========================= */
+
+function shoot(){
+
+  bullets.push({
+
+    x:player.x+player.w/2-2,
+    y:player.y,
+
+    w:laserMode ? 8 : 4,
+
+    h:laserMode ? 22 : 12
+
+  });
+
+  playSound('shoot');
+
+}
+
+setInterval(()=>{
+
+  if(running && !paused && !gameOver){
+    shoot();
+  }
+
+},220);
+
+
+/* =========================
+   ENEMIES
+========================= */
+
+function createEnemy(){
+
+  let baseSpeed = 2 + Math.random() * 3;
+
+  enemies.push({
+
+    x:Math.random() * (canvas.width - 40),
+
+    y:-40,
+
+    w:40,
+    h:40,
+
+    speed:baseSpeed * gameSpeedMultiplier
+
+  });
+
+}
+
+setInterval(()=>{
+
+  if(running && !paused && !gameOver){
+    createEnemy();
+  }
+
+},850);
+
+
+/* =========================
+   POWERUPS
+========================= */
+
+function maybeSpawnPowerup(x,y){
+
+  const r = Math.random();
+
+  if(r < 0.15){
+
+    powerups.push({
+      x,
+      y,
+      type:'shield',
+      r:12
+    });
+
+  }
+
+  else if(r < 0.30){
+
+    powerups.push({
+      x,
+      y,
+      type:'laser',
+      r:12
+    });
+
+  }
+
+  else if(r < 0.55){
+
+    coins.push({
+      x,
+      y,
+      r:8
+    });
+
+  }
+
+}
+
+
+/* =========================
+   BULLETS
+========================= */
+
+function updateBullets(){
+
+  for(let i=bullets.length-1;i>=0;i--){
+
+    let b = bullets[i];
+
+    b.y -= laserMode ? 14 : 10;
+
+    ctx.font =
+      laserMode ? '22px Arial' : '18px Arial';
+
+    ctx.fillText(
+      laserMode ? '⚡' : '🔥',
+      b.x - 4,
+      b.y + 12
+    );
+
+    if(b.y < -30){
+      bullets.splice(i,1);
+    }
+
+  }
+
+}
+
+
+/* =========================
+   BOSS BULLETS
+========================= */
+
+function updateBossBullets(){
+
+  for(let i=bossBullets.length-1;i>=0;i--){
+
+    let bb = bossBullets[i];
+
+    let speed = 4 * gameSpeedMultiplier;
+
+    bb.y += speed;
+
+    ctx.font='20px Arial';
+
+    ctx.fillText(
+      '☄️',
+      bb.x - 4,
+      bb.y + 12
+    );
+
+    if(
+
+      player.x < bb.x + bb.w &&
+      player.x + player.w > bb.x &&
+      player.y < bb.y + bb.h &&
+      player.y + player.h > bb.y
+
+    ){
+
+      bossBullets.splice(i,1);
+
+      addExplosion(
+        player.x + 20,
+        player.y + 25
+      );
+
+      playSound('explosion');
+
+      if(player.shield){
+
+        player.shield = false;
+
+      }else{
+
+        lives--;
+
+      }
+
+      if(lives <= 0){
+        endGame();
+      }
+
+      continue;
+    }
+
+    if(bb.y > canvas.height + 20){
+      bossBullets.splice(i,1);
+    }
+
+  }
+
+}
+
+
+/* =========================
+   EXPLOSIONS
+========================= */
+
+function addExplosion(x,y){
+
+  explosions.push({
+    x,
+    y,
+    r:5
+  });
+
+}
+
+function updateExplosions(){
+
+  for(let i=explosions.length-1;i>=0;i--){
+
+    let ex = explosions[i];
+
+    ctx.beginPath();
+
+    ctx.arc(
+      ex.x,
+      ex.y,
+      ex.r,
+      0,
+      Math.PI*2
+    );
+
+    ctx.fillStyle='orange';
+
+    ctx.fill();
+
+    ex.r += 2;
+
+    if(ex.r > 22){
+      explosions.splice(i,1);
+    }
+
+  }
+
+}
+
+
+/* =========================
+   ENEMIES UPDATE
+========================= */
+
+function updateEnemies(){
+
+  for(let i=enemies.length-1;i>=0;i--){
+
+    let e = enemies[i];
+
+    e.y += e.speed;
+
+    ctx.font='34px Arial';
+
+    ctx.fillText(
+      '👾',
+      e.x,
+      e.y + 32
+    );
+
+    if(
+
+      player.x < e.x+e.w &&
+      player.x+player.w > e.x &&
+      player.y < e.y+e.h &&
+      player.y+player.h > e.y
+
+    ){
+
+      enemies.splice(i,1);
+
+      addExplosion(
+        e.x+20,
+        e.y+20
+      );
+
+      playSound('explosion');
+
+      if(player.shield){
+
+        player.shield=false;
+
+      }else{
+
+        lives--;
+
+      }
+
+      if(lives <= 0){
+        endGame();
+      }
+
+      continue;
+    }
+
+    for(let j=bullets.length-1;j>=0;j--){
+
+      let b = bullets[j];
+
+      if(
+
+        b.x < e.x+e.w &&
+        b.x+b.w > e.x &&
+        b.y < e.y+e.h &&
+        b.y+b.h > e.y
+
+      ){
+
+        addExplosion(
+          e.x+20,
+          e.y+20
+        );
+
+        playSound('explosion');
+
+        maybeSpawnPowerup(
+          e.x+20,
+          e.y+20
+        );
+
+        enemies.splice(i,1);
+        bullets.splice(j,1);
+
+        score++;
+
+        gameSpeedMultiplier =
+          1 + Math.floor(score / 15) * 0.15;
+
+        if(score % 20 === 0 && !boss){
+          spawnBoss();
+        }
+
+        break;
+      }
+
+    }
+
+    if(e.y > canvas.height+20){
+      enemies.splice(i,1);
+    }
+
+  }
+
+}
+
+
+/* =========================
+   BOSS
+========================= */
+
+function spawnBoss(){
+
+  boss = {
+
+    x:110,
+    y:40,
+
+    w:140,
+    h:70,
+
+    hp:20,
+
+    dir:2,
+
+    shootTimer:0
+
+  };
+
+}
+
+function updateBoss(){
+
+  if(!boss) return;
+
+  boss.x += boss.dir;
+
+  if(
+    boss.x < 0 ||
+    boss.x + boss.w > canvas.width
+  ){
+
+    boss.dir *= -1;
+
+  }
+
+  boss.shootTimer++;
+
+  if(boss.shootTimer >= 90){
+
+    boss.shootTimer = 0;
+
+    bossBullets.push({
+
+      x:boss.x + boss.w / 2 - 6,
+
+      y:boss.y + boss.h,
+
+      w:12,
+
+      h:16
+
+    });
+
+  }
+
+  ctx.font='60px Arial';
+
+  ctx.fillText(
+    '🛸',
+    boss.x + 10,
+    boss.y + 50
+  );
+
+  ctx.fillStyle='white';
+
+  ctx.font='18px Arial';
+
+  ctx.fillText(
+    'BOSS HP: '+boss.hp,
+    110,
+    30
+  );
+
+  for(let j=bullets.length-1;j>=0;j--){
+
+    let b = bullets[j];
+
+    if(
+
+      b.x < boss.x+boss.w &&
+      b.x+b.w > boss.x &&
+      b.y < boss.y+boss.h &&
+      b.y+b.h > boss.y
+
+    ){
+
+      bullets.splice(j,1);
+
+      boss.hp--;
+
+      addExplosion(
+        b.x,
+        b.y
+      );
+
+      playSound('explosion');
+
+      if(boss.hp <= 0){
+
+        addExplosion(
+          boss.x+70,
+          boss.y+35
+        );
+
+        score += 10;
+
+        boss = null;
+
+        bossBullets = [];
+
+      }
+
+    }
+
+  }
+
+}
+
+
+/* =========================
+   COINS
+========================= */
+
+function updateCoins(){
+
+  for(let i=coins.length-1;i>=0;i--){
+
+    let c = coins[i];
+
+    c.y += 2 * gameSpeedMultiplier;
+
+    ctx.font='22px Arial';
+
+    ctx.fillText(
+      '🪙',
+      c.x - 10,
+      c.y + 8
+    );
+
+    if(
+
+      player.x < c.x+c.r &&
+      player.x+player.w > c.x-c.r &&
+      player.y < c.y+c.r &&
+      player.y+player.h > c.y-c.r
+
+    ){
+
+      coinCount++;
+
+      playSound('coin');
+
+      coins.splice(i,1);
+
+      continue;
+
+    }
+
+    if(c.y > canvas.height){
+      coins.splice(i,1);
+    }
+
+  }
+
+}
+
+
+/* =========================
+   POWERUPS UPDATE
+========================= */
+
+function updatePowerups(){
+
+  for(let i=powerups.length-1;i>=0;i--){
+
+    let p = powerups[i];
+
+    p.y += 2 * gameSpeedMultiplier;
+
+    ctx.font='24px Arial';
+
+    ctx.fillText(
+
+      p.type === 'shield'
+      ? '🛡️'
+      : '⚡',
+
+      p.x - 12,
+      p.y + 8
+
+    );
+
+    if(
+
+      player.x < p.x+p.r &&
+      player.x+player.w > p.x-p.r &&
+      player.y < p.y+p.r &&
+      player.y+player.h > p.y-p.r
+
+    ){
+
+      playSound('powerup');
+
+      if(p.type === 'shield'){
+
+        player.shield=true;
+
+      }
+
+      else{
+
+        laserMode=true;
+
+        setTimeout(()=>{
+          laserMode=false;
+        },8000);
+
+      }
+
+      powerups.splice(i,1);
+
+      continue;
+
+    }
+
+    if(p.y > canvas.height){
+      powerups.splice(i,1);
+    }
+
+  }
+
+}
+
+
+/* =========================
+   HUD
+========================= */
+
+function drawHUD(){
+
+  ctx.fillStyle='white';
+
+  ctx.font='18px Arial';
+
+  ctx.fillText(
+    'Score: '+score,
+    10,
+    25
+  );
+
+  ctx.fillText(
+    'Best: '+best,
+    240,
+    25
+  );
+
+  ctx.fillText(
+    'Lives: '+lives,
+    10,
+    50
+  );
+
+  ctx.fillText(
+    'Coins: '+coinCount,
+    240,
+    50
+  );
+
+  if(laserMode){
+
+    ctx.fillStyle='cyan';
+
+    ctx.fillText(
+      'LASER ON',
+      130,
+      25
+    );
+
+  }
+
+}
+
+
+/* =========================
+   GAME OVER
+========================= */
+
+function endGame(){
+
+  gameOver=true;
+
+  running=false;
+
+  pauseBackgroundMusic();
+
+  if(score > best){
+
+    best=score;
+
+    localStorage.setItem(
+      'bestUltra',
+      best
+    );
+
+  }
+
+}
+
+function drawGameOver(){
+
+  ctx.fillStyle='red';
+
+  ctx.font='34px Arial';
+
+  ctx.fillText(
+    'GAME OVER',
+    75,
+    250
+  );
+
+  ctx.fillStyle='white';
+
+  ctx.font='22px Arial';
+
+  ctx.fillText(
+    'Score: '+score,
+    120,
+    300
+  );
+
+  ctx.fillText(
+    'Coins: '+coinCount,
+    120,
+    335
+  );
+
+  ctx.fillText(
+    'Best: '+best,
+    125,
+    370
+  );
+
+  ctx.fillStyle='lime';
+
+  ctx.fillRect(
+    100,
+    420,
+    160,
+    55
+  );
+
+  ctx.fillStyle='black';
+
+  ctx.font='24px Arial';
+
+  ctx.fillText(
+    'RESTART',
+    118,
+    455
+  );
+
+}
+
+
+/* =========================
+   GAME LOOP
+========================= */
+
+function loop(){
+
+  ctx.clearRect(
+    0,
+    0,
+    canvas.width,
+    canvas.height
+  );
+
+  drawStars();
+
+  drawPlayer();
+
+  if(running && !paused){
+
+    updateBullets();
+
+    updateBossBullets();
+
+    updateEnemies();
+
+    updateBoss();
+
+    updateCoins();
+
+    updatePowerups();
+
+    updateExplosions();
+
+  }else{
+
+    updateExplosions();
+
+  }
+
+  drawHUD();
+
+  if(paused && !gameOver){
+
+    ctx.fillStyle='white';
+
+    ctx.font='36px Arial';
+
+    ctx.fillText(
+      'PAUSED',
+      110,
+      300
+    );
+
+  }
+
+  if(gameOver){
+
+    drawGameOver();
+
+  }
+
+  requestAnimationFrame(loop);
+
+}
+
+
+/* =========================
+   RESET GAME
+========================= */
+
+function resetGame(){
+
+  player.x=160;
+
+  player.shield=false;
+
+  bullets=[];
+  bossBullets=[];
+  enemies=[];
+  explosions=[];
+  coins=[];
+  powerups=[];
+
+  boss=null;
+
+  score=0;
+  coinCount=0;
+  lives=3;
+
+  laserMode=false;
+
+  gameSpeedMultiplier=1;
+
+  gameOver=false;
+  paused=false;
+  running=true;
+
+  playBackgroundMusic();
+
+}
+
+
+/* =========================
+   MOVEMENT
+========================= */
+
+function moveLeft(){
+
+  if(running && !paused && !gameOver){
+
+    player.x -= player.speed;
+
+    if(player.x < 0){
+      player.x=0;
+    }
+
+  }
+
+}
+
+function moveRight(){
+
+  if(running && !paused && !gameOver){
+
+    player.x += player.speed;
+
+    if(player.x + player.w > canvas.width){
+
+      player.x =
+        canvas.width - player.w;
+
+    }
+
+  }
+
+}
+
+
+/* =========================
+   BUTTONS
+========================= */
+
+document.getElementById('leftBtn').onclick =
+  moveLeft;
+
+document.getElementById('rightBtn').onclick =
+  moveRight;
+
+
+/* PAUSE */
+
+document.getElementById('pauseBtn').onclick = ()=>{
+
+  if(gameOver || !running) return;
+
+  paused=!paused;
+
+  document.getElementById('pauseBtn').innerText =
+    paused ? '▶️' : '⏸️';
+
+  if(paused){
+
+    pauseBackgroundMusic();
+
+  }else{
+
+    playBackgroundMusic();
+
+  }
+
+};
+
+
+/* START GAME */
+
+document.getElementById('startBtn').onclick = ()=>{
+
+  initAudio();
+
+  document.getElementById(
+    'startScreen'
+  ).style.display='none';
+
+  resetGame();
+
+};
+
+
+/* GAME OVER RESTART */
+
+canvas.addEventListener('click',e=>{
+
+  if(gameOver){
+
+    const rect =
+      canvas.getBoundingClientRect();
+
+    const x =
+      e.clientX - rect.left;
+
+    const y =
+      e.clientY - rect.top;
+
+    if(
+      x>100 &&
+      x<260 &&
+      y>420 &&
+      y<475
+    ){
+
+      resetGame();
+
+    }
+
+  }
+
+});
+
+
+/* KEYBOARD */
+
+document.addEventListener('keydown',e=>{
+
+  if(e.key==='ArrowLeft'){
+    moveLeft();
+  }
+
+  if(e.key==='ArrowRight'){
+    moveRight();
+  }
+
+  if(e.key==='p'){
+
+    paused=!paused;
+
+    if(paused){
+
+      pauseBackgroundMusic();
+
+    }else if(running){
+
+      playBackgroundMusic();
+
+    }
+
+  }
+
+});
+
+
+/* START LOOP */
+
+loop();
+
+</script>
+
+</body>
+</html>
